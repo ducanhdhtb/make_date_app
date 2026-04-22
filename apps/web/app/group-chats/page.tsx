@@ -5,8 +5,9 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from '@/components/layout';
 import { CreateGroupModal } from '@/components/create-group-modal';
 import { GroupInfoSidebar } from '@/components/group-info-sidebar';
-import { apiFetch } from '@/lib/api';
-import { getStoredUser } from '@/lib/auth';
+import { GroupMessageActions } from '@/components/group-message-actions';
+import { apiFetch, API_BASE_URL } from '@/lib/api';
+import { getAccessToken, getStoredUser } from '@/lib/auth';
 import { getSocketClient, subscribeSocketState } from '@/lib/socket';
 import { SocketConnectionState } from '@/lib/types';
 
@@ -113,6 +114,8 @@ export default function GroupChatsPage() {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [messageText, setMessageText] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -120,6 +123,7 @@ export default function GroupChatsPage() {
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
   
   const chatBoxRef = useRef<HTMLDivElement | null>(null);
   const joinedGroupRef = useRef('');
@@ -198,24 +202,77 @@ export default function GroupChatsPage() {
 
   const sendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedGroupId || !messageText.trim() || !currentUser) return;
+    if (!selectedGroupId || (!messageText.trim() && !imageFile) || !currentUser) return;
 
     const textSnapshot = messageText;
+    const fileSnapshot = imageFile;
+    const previewSnapshot = imagePreviewUrl;
+    const replySnapshot = replyTo;
+
     setSending(true);
     emitTypingStop();
     setMessageText('');
+    setImageFile(null);
+    setImagePreviewUrl('');
+    setReplyTo(null);
 
     try {
-      await apiFetch(`/group-conversations/${selectedGroupId}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ textContent: textSnapshot.trim() })
-      });
+      if (fileSnapshot) {
+        // Upload image
+        const token = getAccessToken();
+        if (!token) throw new Error('Thiếu access token');
+
+        const formData = new FormData();
+        formData.append('file', fileSnapshot);
+        if (textSnapshot.trim()) formData.append('textContent', textSnapshot.trim());
+        if (replySnapshot?.id) formData.append('parentMessageId', replySnapshot.id);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE_URL}/group-conversations/${selectedGroupId}/messages/image`);
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        await new Promise<void>((resolve, reject) => {
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else {
+              reject(new Error('Upload ảnh thất bại'));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Không thể kết nối khi upload ảnh'));
+          xhr.send(formData);
+        });
+      } else {
+        // Send text message
+        await apiFetch(`/group-conversations/${selectedGroupId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({
+            textContent: textSnapshot.trim(),
+            parentMessageId: replySnapshot?.id || undefined,
+          }),
+        });
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Không gửi được tin nhắn');
       setMessageText(textSnapshot);
+      setImageFile(fileSnapshot);
+      setImagePreviewUrl(previewSnapshot);
+      setReplyTo(replySnapshot);
     } finally {
       setSending(false);
     }
+  };
+
+  const handleSelectImage = (file: File | null) => {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    if (!file) {
+      setImageFile(null);
+      setImagePreviewUrl('');
+      return;
+    }
+    setImageFile(file);
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreviewUrl(previewUrl);
   };
 
   const toggleReaction = async (messageId: string, emoji: string) => {
@@ -494,6 +551,7 @@ export default function GroupChatsPage() {
               <div ref={chatBoxRef} className="chat-box" style={{ minHeight: 400, maxHeight: 500 }}>
                 {messages.map((message) => {
                   const mine = message.sender.id === currentUser?.id;
+                  const isOwnerOrAdmin = selectedGroup?.createdByUserId === currentUser?.id;
                   return (
                     <div 
                       key={message.id} 
@@ -535,6 +593,10 @@ export default function GroupChatsPage() {
                         <div className="chat-system-note">Tin nhắn đã bị xóa</div>
                       ) : null}
 
+                      {message.pinnedAt ? (
+                        <div className="chat-system-note">📌 Tin nhắn đã được ghim</div>
+                      ) : null}
+
                       <div style={{ 
                         fontSize: 12, 
                         marginTop: 6, 
@@ -551,33 +613,36 @@ export default function GroupChatsPage() {
                           })}
                         </span>
 
-                        {message.reactions?.length ? (
-                          <div className="reaction-row">
-                            {message.reactions.map((reaction) => (
-                              <button
-                                key={`${message.id}-${reaction.emoji}`}
-                                className={`reaction-chip ${reaction.reacted ? 'active' : ''}`}
-                                type="button"
-                                onClick={() => toggleReaction(message.id, reaction.emoji)}
-                              >
-                                <span>{reaction.emoji}</span>
-                                <span>{reaction.count}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          {message.reactions?.length ? (
+                            <div className="reaction-row">
+                              {message.reactions.map((reaction) => (
+                                <button
+                                  key={`${message.id}-${reaction.emoji}`}
+                                  className={`reaction-chip ${reaction.reacted ? 'active' : ''}`}
+                                  type="button"
+                                  onClick={() => toggleReaction(message.id, reaction.emoji)}
+                                >
+                                  <span>{reaction.emoji}</span>
+                                  <span>{reaction.count}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
 
-                        <div className="message-actions">
-                          {['❤️', '👍', '😂'].map((emoji) => (
-                            <button
-                              key={`${message.id}-quick-${emoji}`}
-                              className="btn btn-outline btn-xs"
-                              type="button"
-                              onClick={() => toggleReaction(message.id, emoji)}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
+                          <GroupMessageActions
+                            message={message}
+                            groupId={selectedGroupId}
+                            isOwn={mine}
+                            isOwnerOrAdmin={isOwnerOrAdmin}
+                            onReply={(msg) => setReplyTo(msg)}
+                            onReactionAdded={() => {}}
+                            onMessageUpdated={(updated) => {
+                              setMessages((prev) =>
+                                prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+                              );
+                            }}
+                          />
                         </div>
                       </div>
                     </div>
@@ -601,11 +666,56 @@ export default function GroupChatsPage() {
                   }}
                   placeholder="Nhập tin nhắn..."
                 />
+
+                {replyTo ? (
+                  <div className="quoted-message composer-quote">
+                    <div className="inline-status" style={{ justifyContent: 'space-between' }}>
+                      <strong>Đang trả lời {replyTo.sender.displayName}</strong>
+                      <button className="btn btn-outline btn-xs" type="button" onClick={() => setReplyTo(null)}>
+                        Bỏ reply
+                      </button>
+                    </div>
+                    <div>{replyTo.textContent || 'Tin nhắn'}</div>
+                  </div>
+                ) : null}
+
+                {imagePreviewUrl ? (
+                  <div className="composer-preview">
+                    <Image 
+                      src={imagePreviewUrl} 
+                      alt="Preview" 
+                      width={180} 
+                      height={180} 
+                      className="chat-image" 
+                      unoptimized 
+                    />
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      <strong>{imageFile?.name}</strong>
+                      <div className="inline-status">
+                        <button 
+                          className="btn btn-outline btn-xs" 
+                          type="button"
+                          onClick={() => handleSelectImage(null)}
+                        >
+                          Xóa ảnh
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="inline-status">
+                  <input 
+                    id="group-chat-image-input" 
+                    className="input" 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => handleSelectImage(e.target.files?.[0] || null)} 
+                  />
                   <button 
                     className="btn btn-primary" 
                     type="submit" 
-                    disabled={sending || !messageText.trim()}
+                    disabled={sending || (!messageText.trim() && !imageFile)}
                   >
                     {sending ? 'Đang gửi...' : 'Gửi'}
                   </button>
