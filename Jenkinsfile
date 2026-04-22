@@ -140,7 +140,11 @@ pipeline {
           skipped = 0
         }
 
-        def total     = passed + failed + skipped
+        // Recalculate total if needed (in case fallback didn't set it)
+        if (total == 0 && (passed > 0 || failed > 0 || skipped > 0)) {
+          total = passed + failed + skipped
+        }
+        
         def allureUrl = "${env.BUILD_URL}allure/"
         def subject   = "[NearMatch E2E] ${currentBuild.currentResult} — Build #${env.BUILD_NUMBER} | ✅${passed} ❌${failed} ⚠️${skipped}"
 
