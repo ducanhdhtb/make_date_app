@@ -32,6 +32,7 @@ pipeline {
   }
 
   stages {
+
     stage('Checkout Web Repo') {
       steps {
         checkout scm
@@ -52,7 +53,6 @@ pipeline {
         dir("${AUTOMATION_DIR}") {
           deleteDir()
           git branch: "${AUTOMATION_BRANCH}",
-              credentialsId: 'github-pat',
               url: "${AUTOMATION_REPO}"
         }
       }
@@ -145,12 +145,14 @@ Target: ${params.BASE_URL}
         to: "${NOTIFY_EMAIL}",
         subject: "[SMOKE UNSTABLE] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
         body: """
-Smoke test unstable
+Smoke test unstable (có test fail)
 
 Job: ${env.JOB_NAME}
 Build: #${env.BUILD_NUMBER}
 URL: ${env.BUILD_URL}
 Target: ${params.BASE_URL}
+
+Xem chi tiết: ${env.BUILD_URL}allure/
 """.stripIndent()
       )
     }
