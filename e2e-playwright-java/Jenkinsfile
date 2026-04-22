@@ -15,6 +15,11 @@ pipeline {
     ALLURE_REPORT  = 'e2e-playwright-java/target/allure-report'
   }
 
+  // ── Auto trigger khi GitHub push ──────────────────────────────────────────
+  triggers {
+    githubPush()   // fires on every push via GitHub webhook → Jenkins
+  }
+
   options {
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
