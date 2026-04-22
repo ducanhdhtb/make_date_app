@@ -124,6 +124,8 @@ export default function GroupChatsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [replyTo, setReplyTo] = useState<GroupMessage | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   
   const chatBoxRef = useRef<HTMLDivElement | null>(null);
   const joinedGroupRef = useRef('');
@@ -162,7 +164,11 @@ export default function GroupChatsPage() {
     setError('');
     setMessages([]);
     try {
-      const data = await apiFetch<{ items: GroupMessage[] }>(`/group-conversations/${groupId}/messages?limit=50`);
+      const qs = new URLSearchParams({ limit: '50' });
+      if (activeSearchQuery.trim()) {
+        qs.set('q', activeSearchQuery.trim());
+      }
+      const data = await apiFetch<{ items: GroupMessage[] }>(`/group-conversations/${groupId}/messages?${qs.toString()}`);
       setMessages(data.items || []);
       
       setTimeout(() => {
@@ -309,7 +315,7 @@ export default function GroupChatsPage() {
     if (selectedGroupId) {
       loadMessages(selectedGroupId);
     }
-  }, [selectedGroupId]);
+  }, [selectedGroupId, activeSearchQuery]);
 
   useEffect(() => {
     emitTypingStop();
@@ -546,6 +552,38 @@ export default function GroupChatsPage() {
                   ℹ️ Thông tin
                 </button>
               </div>
+
+              {/* Search Bar */}
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setActiveSearchQuery(searchQuery.trim());
+                }}
+                className="chat-search-bar"
+                style={{ marginBottom: 16 }}
+              >
+                <input 
+                  className="input" 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                  placeholder="Tìm tin nhắn..." 
+                />
+                <button className="btn btn-outline btn-xs" type="submit">
+                  🔍 Tìm
+                </button>
+                {activeSearchQuery ? (
+                  <button 
+                    className="btn btn-outline btn-xs" 
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setActiveSearchQuery('');
+                    }}
+                  >
+                    Bỏ lọc
+                  </button>
+                ) : null}
+              </form>
 
               {/* Messages */}
               <div ref={chatBoxRef} className="chat-box" style={{ minHeight: 400, maxHeight: 500 }}>
