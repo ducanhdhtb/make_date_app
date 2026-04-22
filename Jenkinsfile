@@ -119,7 +119,9 @@ pipeline {
           ).trim()
           
           if (jsonOutput) {
-            def results = readJSON text: jsonOutput
+            // Parse JSON manually (không cần readJSON plugin)
+            def jsonSlurper = new groovy.json.JsonSlurper()
+            def results = jsonSlurper.parseText(jsonOutput)
             
             total   = results.total ?: 0
             passed  = results.passed ?: 0
