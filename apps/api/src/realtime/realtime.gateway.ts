@@ -247,6 +247,137 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     this.server.to(this.groupRoom(groupConversationId)).emit('group.updated', payload);
   }
 
+  // ============ VIDEO/VOICE CALL EVENTS ============
+
+  // Emit incoming call to receiver
+  emitIncomingCall(receiverId: string, payload: unknown) {
+    this.server.to(this.userRoom(receiverId)).emit('call.incoming', payload);
+  }
+
+  // Emit call answered to caller
+  emitCallAnswered(callerId: string, payload: unknown) {
+    this.server.to(this.userRoom(callerId)).emit('call.answered', payload);
+  }
+
+  // Emit call rejected to caller
+  emitCallRejected(callerId: string, payload: unknown) {
+    this.server.to(this.userRoom(callerId)).emit('call.rejected', payload);
+  }
+
+  // Emit call ended to both parties
+  emitCallEnded(userIds: string[], payload: unknown) {
+    userIds.forEach((userId) => {
+      this.server.to(this.userRoom(userId)).emit('call.ended', payload);
+    });
+  }
+
+  // WebRTC Signaling - SDP Offer
+  @SubscribeMessage('call.sdp_offer')
+  handleSdpOffer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { callId?: string; sdp?: unknown; receiverId?: string }
+  ) {
+    const { callId, sdp, receiverId } = body;
+    if (!callId || !sdp || !receiverId) return { ok: false };
+    
+    // Forward SDP offer to receiver
+    this.server.to(this.userRoom(receiverId)).emit('call.sdp_offer', {
+      callId,
+      sdp,
+      callerId: client.data.user?.sub
+    });
+    return { ok: true };
+  }
+
+  // WebRTC Signaling - SDP Answer
+  @SubscribeMessage('call.sdp_answer')
+  handleSdpAnswer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { callId?: string; sdp?: unknown; callerId?: string }
+  ) {
+    const { callId, sdp, callerId } = body;
+    if (!callId || !sdp || !callerId) return { ok: false };
+    
+    // Forward SDP answer to caller
+    this.server.to(this.userRoom(callerId)).emit('call.sdp_answer', {
+      callId,
+      sdp,
+      receiverId: client.data.user?.sub
+    });
+    return { ok: true };
+  }
+
+  // WebRTC Signaling - ICE Candidate
+  @SubscribeMessage('call.ice_candidate')
+  handleIceCandidate(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { callId?: string; candidate?: unknown; targetUserId?: string }
+  ) {
+    const { callId, candidate, targetUserId } = body;
+    if (!callId || !candidate || !targetUserId) return { ok: false };
+    
+    // Forward ICE candidate to target user
+    this.server.to(this.userRoom(targetUserId)).emit('call.ice_candidate', {
+      callId,
+      candidate,
+      fromUserId: client.data.user?.sub
+    });
+    return { ok: true };
+  }
+
+  // Call answer event
+  @SubscribeMessage('call.answer')
+  handleCallAnswer(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { callId?: string; callerId?: string }
+  ) {
+    const { callId, callerId } = body;
+    if (!callId || !callerId) return { ok: false };
+    
+    // Notify caller that receiver answered
+    this.server.to(this.userRoom(callerId)).emit('call.answered', {
+      callId,
+      receiverId: client.data.user?.sub
+    });
+    return { ok: true };
+  }
+
+  // Call reject event
+  @SubscribeMessage('call.reject')
+  handleCallReject(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { callId?: string; callerId?: string; reason?: string }
+  ) {
+    const { callId, callerId, reason } = body;
+    if (!callId || !callerId) return { ok: false };
+    
+    // Notify caller that receiver rejected
+    this.server.to(this.userRoom(callerId)).emit('call.rejected', {
+      callId,
+      receiverId: client.data.user?.sub,
+      reason: reason || 'rejected'
+    });
+    return { ok: true };
+  }
+
+  // Call end event
+  @SubscribeMessage('call.end')
+  handleCallEnd(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { callId?: string; targetUserId?: string; duration?: number }
+  ) {
+    const { callId, targetUserId, duration } = body;
+    if (!callId || !targetUserId) return { ok: false };
+    
+    // Notify other party that call ended
+    this.server.to(this.userRoom(targetUserId)).emit('call.ended', {
+      callId,
+      endedBy: client.data.user?.sub,
+      duration: duration || 0
+    });
+    return { ok: true };
+  }
+
   private extractToken(client: Socket) {
     const authToken = typeof client.handshake.auth?.token === 'string'
       ? client.handshake.auth.token

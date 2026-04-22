@@ -1,6 +1,6 @@
 'use client';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BottomNav } from '@/components/layout';
 import { SafetyActions } from '@/components/safety-actions';
@@ -9,7 +9,7 @@ import { getAccessToken } from '@/lib/auth';
 import { ProfileDetail } from '@/lib/types';
 const FALLBACK='https://placehold.co/1000x700/png';
 
-export default function ProfilePage() {
+function ProfileContent() {
   const params = useSearchParams();
   const profileId = params.get('id');
   const [user, setUser] = useState<ProfileDetail | null>(null);
@@ -52,7 +52,7 @@ export default function ProfilePage() {
         await navigator.clipboard.writeText(link);
         alert('Đã copy link profile');
       }
-      await apiFetch('/shares', { method: 'POST', body: JSON.stringify({ targetType: 'profile', targetId: user.id, channel: navigator.share ? 'web_share' : 'copy_link' }) });
+      await apiFetch('/shares', { method: 'POST', body: JSON.stringify({ targetType: 'profile', targetId: user.id, channel: typeof navigator.share === 'function' ? 'web_share' : 'copy_link' }) });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Không thể chia sẻ');
     }
@@ -113,5 +113,13 @@ export default function ProfilePage() {
       ) : null}
       <BottomNav />
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="card" style={{ marginTop: 16 }}>Đang tải...</div>}>
+      <ProfileContent />
+    </Suspense>
   );
 }

@@ -15,6 +15,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { GroupConversationsModule } from './group-conversations/group-conversations.module';
 import { GroupMessagesModule } from './group-messages/group-messages.module';
+import { CallsModule } from './calls/calls.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { GroupMessagesModule } from './group-messages/group-messages.module';
     NotificationsModule,
     GroupConversationsModule,
     GroupMessagesModule,
+    CallsModule,
   ]
 })
 export class AppModule {}

@@ -91,3 +91,39 @@ export type ReportItem = {
   details?: string | null;
   createdAt: string;
 };
+
+// ============ VIDEO/VOICE CALL TYPES ============
+
+export type CallType = 'video' | 'voice';
+export type CallStatus = 'ringing' | 'connected' | 'ended' | 'missed' | 'rejected';
+
+export type Call = {
+  id: string;
+  conversationId: string;
+  callerId: string;
+  receiverId: string;
+  callType: CallType;
+  status: CallStatus;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  durationSeconds?: number | null;
+  createdAt: string;
+  caller?: { id: string; displayName: string; avatarUrl?: string | null };
+  receiver?: { id: string; displayName: string; avatarUrl?: string | null };
+};
+
+export type IncomingCallPayload = {
+  callId: string;
+  caller: { id: string; displayName: string; avatarUrl?: string | null };
+  callType: CallType;
+  conversationId: string;
+};
+
+export type WebRTCSignalingPayload = {
+  callId: string;
+  sdp?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+  callerId?: string;
+  receiverId?: string;
+  fromUserId?: string;
+};

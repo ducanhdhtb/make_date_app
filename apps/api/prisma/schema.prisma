@@ -108,6 +108,9 @@ model User {
   
   groupConversationsCreated GroupConversation[] @relation("created_by")
   groupConversationMembers  GroupConversationMember[]
+  
+  callsMade     Call[] @relation("CallCaller")
+  callsReceived Call[] @relation("CallReceiver")
   groupMessages             GroupMessage[]
   groupMessageReactions     GroupMessageReaction[]
 
@@ -230,6 +233,7 @@ model Conversation {
   updatedAt    DateTime                  @updatedAt
   participants ConversationParticipant[]
   messages     Message[]
+  calls        Call[]
 
   @@index([updatedAt])
 }
@@ -405,4 +409,42 @@ model GroupMessageReaction {
 
   @@unique([groupMessageId, userId, emoji])
   @@index([groupMessageId, createdAt])
+}
+
+// ============ VIDEO/VOICE CALL MODELS ============
+
+enum CallType {
+  video
+  voice
+}
+
+enum CallStatus {
+  ringing
+  connected
+  ended
+  missed
+  rejected
+}
+
+model Call {
+  id             String     @id @default(uuid())
+  conversationId String
+  callerId       String
+  receiverId     String
+  callType       CallType
+  status         CallStatus @default(ringing)
+  startedAt      DateTime?
+  endedAt        DateTime?
+  durationSeconds Int?
+  createdAt      DateTime   @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  caller       User         @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
+  receiver     User         @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([callerId])
+  @@index([receiverId])
+  @@index([status])
+  @@index([createdAt])
 }

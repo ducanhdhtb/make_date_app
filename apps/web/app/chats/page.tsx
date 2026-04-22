@@ -1,15 +1,16 @@
 'use client';
 
 import Image from 'next/image';
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BottomNav } from '@/components/layout';
 import { API_BASE_URL, apiFetch } from '@/lib/api';
 import { getAccessToken, getStoredUser } from '@/lib/auth';
 import { SafetyActions } from '@/components/safety-actions';
 import { compressImageForChat, formatBytes } from '@/lib/image';
-import { Conversation, Message, MessageReaction, PaginatedMessagesResponse, SocketConnectionState } from '@/lib/types';
+import { Conversation, Message, MessageReaction, PaginatedMessagesResponse, SocketConnectionState, CallType } from '@/lib/types';
 import { getSocketClient, reconnectSocketClient, subscribeSocketState } from '@/lib/socket';
+import { useCall } from '@/lib/call-context';
 
 const FALLBACK = 'https://placehold.co/240x240/png';
 const PAGE_SIZE = 20;
@@ -59,9 +60,9 @@ type CompressionInfo = {
 
 function formatDelivery(message: DisplayMessage, mine: boolean) {
   if (!mine) return '';
-  if (message.isFailed) return 'Gửi lỗi';
-  if (message.isPending && typeof message.uploadProgress === 'number' && message.uploadProgress > 0) return `Đang tải ${message.uploadProgress}%`;
-  if (message.isPending) return 'Đang gửi';
+  if ((message as any).isFailed) return 'Gửi lỗi';
+  if ((message as any).isPending && typeof (message as any).uploadProgress === 'number' && (message as any).uploadProgress > 0) return `Đang tải ${(message as any).uploadProgress}%`;
+  if ((message as any).isPending) return 'Đang gửi';
   if (message.seenAt) return 'Đã xem';
   if (message.deliveredAt) return 'Đã nhận';
   return 'Đang gửi';
@@ -84,6 +85,73 @@ function getQuotedPreview(message?: { textContent?: string | null; mediaUrl?: st
 
 function reactionPalette() {
   return ['❤️', '👍', '😂', '😍', '😮'];
+}
+
+function CallButtons({ conversationId, receiverId }: { conversationId: string; receiverId: string }) {
+  const { initiateCall, currentCall, isCallActive } = useCall();
+  const [calling, setCalling] = useState(false);
+
+  const handleCall = async (callType: CallType) => {
+    if (calling || currentCall || isCallActive) return;
+    setCalling(true);
+    try {
+      await initiateCall(conversationId, receiverId, callType);
+    } catch (error) {
+      console.error('Failed to initiate call:', error);
+      alert('Không thể thực hiện cuộc gọi. Vui lòng thử lại.');
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      <button
+        type="button"
+        onClick={() => handleCall('voice')}
+        disabled={calling || !!currentCall || isCallActive}
+        style={{
+          padding: '8px 12px',
+          borderRadius: 999,
+          border: 'none',
+          background: calling || currentCall || isCallActive ? '#ccc' : '#10b981',
+          color: 'white',
+          cursor: calling || currentCall || isCallActive ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          fontSize: 12,
+        }}
+        title="Gọi thoại"
+      >
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => handleCall('video')}
+        disabled={calling || !!currentCall || isCallActive}
+        style={{
+          padding: '8px 12px',
+          borderRadius: 999,
+          border: 'none',
+          background: calling || currentCall || isCallActive ? '#ccc' : '#8b5cf6',
+          color: 'white',
+          cursor: calling || currentCall || isCallActive ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          fontSize: 12,
+        }}
+        title="Gọi video"
+      >
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 function makeDraftDisplayMessage(draft: PendingOutgoingMessage, sender: { id: string; displayName: string; avatarUrl?: string | null }): DisplayMessage {
@@ -122,7 +190,7 @@ function formatTypingLabel(names: string[]) {
   return `${names.slice(0, 2).join(', ')} đang nhập...`;
 }
 
-export default function ChatsPage() {
+function ChatsContent() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -751,8 +819,43 @@ export default function ChatsPage() {
     }
   };
 
+  const pinMessage = async (message: DisplayMessage) => {
+    if (!selectedId) return;
+    try {
+      await apiFetch(`/conversations/${selectedId}/messages/${message.id}/pin`, { method: 'PATCH' });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không ghim được tin nhắn');
+    }
+  };
+
+  const unpinMessage = async (message: DisplayMessage) => {
+    if (!selectedId) return;
+    try {
+      await apiFetch(`/conversations/${selectedId}/messages/${message.id}/pin`, { method: 'DELETE' });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không bỏ ghim được tin nhắn');
+    }
+  };
+
+  const forwardMessage = async (message: DisplayMessage, targetConversationId: string) => {
+    if (!message) return;
+    try {
+      await apiFetch(`/conversations/${targetConversationId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          textContent: message.textContent || '',
+          forwardedFromMessageId: message.id,
+        }),
+      });
+      setForwardMessageTarget(null);
+      alert('Đã chuyển tiếp tin nhắn!');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không chuyển tiếp được tin nhắn');
+    }
+  };
+
   const toggleReaction = async (message: DisplayMessage, emoji: string) => {
-    if (!selectedId || message.isPending) return;
+    if (!selectedId || (message as any).isPending) return;
     const reacted = message.reactions?.some((item) => item.emoji === emoji && item.reacted);
     try {
       const reactions = reacted
@@ -830,12 +933,15 @@ export default function ChatsPage() {
                     {typingNames.length ? <div className="typing-indicator">{formatTypingLabel(typingNames)}</div> : null}
                   </div>
                 </div>
-                <SafetyActions 
-                  targetUserId={selectedTarget.id} 
-                  targetUserName={selectedTarget.displayName} 
-                  reportTargetType="message" 
-                  reportTargetId={selectedId} 
-                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <CallButtons conversationId={selectedId} receiverId={selectedTarget.id} />
+                  <SafetyActions 
+                    targetUserId={selectedTarget.id} 
+                    targetUserName={selectedTarget.displayName} 
+                    reportTargetType="message" 
+                    reportTargetId={selectedId} 
+                  />
+                </div>
               </div>
 
               {pinnedMessages.length ? (
@@ -926,16 +1032,16 @@ export default function ChatsPage() {
                               ))}
                               <button className="btn btn-outline btn-xs" type="button" onClick={() => copyMessage(message)}>Copy</button>
                               <button className="btn btn-outline btn-xs" type="button" disabled={Boolean(message.deletedAt || message.recalledAt)} onClick={() => setReplyTo(message)}>Reply</button>
-                              <button className="btn btn-outline btn-xs" type="button" disabled={Boolean(message.isPending)} onClick={() => message.pinnedAt ? unpinMessage(message) : pinMessage(message)}>{message.pinnedAt ? 'Bỏ ghim' : 'Ghim'}</button>
-                              <button className="btn btn-outline btn-xs" type="button" disabled={Boolean(message.isPending)} onClick={() => setForwardMessageTarget(message)}>Forward</button>
+                              <button className="btn btn-outline btn-xs" type="button" disabled={Boolean((message as any).isPending)} onClick={() => message.pinnedAt ? unpinMessage(message) : pinMessage(message)}>{message.pinnedAt ? 'Bỏ ghim' : 'Ghim'}</button>
+                              <button className="btn btn-outline btn-xs" type="button" disabled={Boolean((message as any).isPending)} onClick={() => setForwardMessageTarget(message)}>Forward</button>
                               {mine ? <button className="btn btn-outline btn-xs" type="button" disabled={actionDisabled} onClick={() => recallMessage(message.id)}>Thu hồi</button> : null}
                               {mine ? <button className="btn btn-outline btn-xs" type="button" disabled={actionDisabled} onClick={() => deleteMessage(message.id)}>Xóa</button> : null}
                             </div>
                           )}
                         </div>
                       </div>
-                      {typeof message.uploadProgress === 'number' && message.isPending ? <div className="upload-progress"><span style={{ width: `${message.uploadProgress}%` }} /></div> : null}
-                      {message.isFailed ? <div className="chat-error-text">{pendingMessages.find((draft) => draft.id === message.pendingDraftId)?.error || 'Tin nhắn gửi lỗi'}</div> : null}
+                      {typeof (message as any).uploadProgress === 'number' && (message as any).isPending ? <div className="upload-progress"><span style={{ width: `${(message as any).uploadProgress}%` }} /></div> : null}
+                      {(message as any).isFailed ? <div className="chat-error-text">{pendingMessages.find((draft) => draft.id === (message as any).pendingDraftId)?.error || 'Tin nhắn gửi lỗi'}</div> : null}
                     </div>
                   );
                 })}
@@ -1019,5 +1125,13 @@ export default function ChatsPage() {
       </div>
       <BottomNav />
     </div>
+  );
+}
+
+export default function ChatsPage() {
+  return (
+    <Suspense fallback={<div className="card" style={{ marginTop: 16 }}>Đang tải...</div>}>
+      <ChatsContent />
+    </Suspense>
   );
 }
