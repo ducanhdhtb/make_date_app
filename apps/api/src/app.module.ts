@@ -13,6 +13,8 @@ import { ReportsModule } from './reports/reports.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { GroupConversationsModule } from './group-conversations/group-conversations.module';
+import { GroupMessagesModule } from './group-messages/group-messages.module';
 
 @Module({
   imports: [
@@ -29,7 +31,9 @@ import { RealtimeModule } from './realtime/realtime.module';
     BlocksModule,
     ReportsModule,
     ConversationsModule,
-    NotificationsModule
+    NotificationsModule,
+    GroupConversationsModule,
+    GroupMessagesModule,
   ]
 })
 export class AppModule {}

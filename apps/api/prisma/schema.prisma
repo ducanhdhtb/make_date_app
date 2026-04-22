@@ -61,6 +61,12 @@ enum ReportStatus {
   actioned
 }
 
+enum GroupMemberRole {
+  owner
+  admin
+  member
+}
+
 model User {
   id                String                    @id @default(uuid())
   email             String                    @unique
@@ -99,6 +105,11 @@ model User {
   messageReceipts   MessageReceipt[]
   notifications     Notification[]
   messageReactions  MessageReaction[]
+  
+  groupConversationsCreated GroupConversation[] @relation("created_by")
+  groupConversationMembers  GroupConversationMember[]
+  groupMessages             GroupMessage[]
+  groupMessageReactions     GroupMessageReaction[]
 
   @@index([latitude, longitude])
   @@index([lastActiveAt])
@@ -315,4 +326,83 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
+}
+
+// ============ GROUP CHAT MODELS ============
+
+model GroupConversation {
+  id              String                    @id @default(uuid())
+  name            String
+  description     String?
+  avatarUrl       String?
+  createdByUserId String
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  createdBy User                        @relation("created_by", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  members   GroupConversationMember[]
+  messages  GroupMessage[]
+
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model GroupConversationMember {
+  id                  String   @id @default(uuid())
+  groupConversationId String
+  userId              String
+  joinedAt            DateTime @default(now())
+  lastReadAt          DateTime?
+  role                GroupMemberRole @default(member)
+
+  groupConversation GroupConversation @relation(fields: [groupConversationId], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupConversationId, userId])
+  @@index([groupConversationId])
+  @@index([userId, joinedAt])
+}
+
+model GroupMessage {
+  id                  String   @id @default(uuid())
+  groupConversationId String
+  senderUserId        String
+  parentMessageId     String?
+  messageType         MessageType @default(text)
+  textContent         String?
+  mediaUrl            String?
+  fileName            String?
+  mimeType            String?
+  fileSize            Int?
+  durationSeconds     Int?
+  pinnedAt            DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  recalledAt          DateTime?
+  deletedAt           DateTime?
+
+  groupConversation GroupConversation       @relation(fields: [groupConversationId], references: [id], onDelete: Cascade)
+  sender            User                   @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  parentMessage     GroupMessage?          @relation("GroupMessageReply", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies           GroupMessage[]         @relation("GroupMessageReply")
+  reactions         GroupMessageReaction[]
+
+  @@index([groupConversationId, createdAt])
+  @@index([groupConversationId, pinnedAt])
+  @@index([senderUserId])
+  @@index([parentMessageId])
+}
+
+model GroupMessageReaction {
+  id            String   @id @default(uuid())
+  groupMessageId String
+  userId        String
+  emoji         String
+  createdAt     DateTime @default(now())
+
+  groupMessage GroupMessage @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupMessageId, userId, emoji])
+  @@index([groupMessageId, createdAt])
 }
