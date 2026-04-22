@@ -111,15 +111,25 @@ Dùng `APIRequestContext` gọi thẳng backend, không qua trình duyệt. Mỗ
 
 ---
 
-### 4.5 Chats — `ChatsTest` (5 cases)
+### 4.5 Chats — `ChatsTest` (15 cases)
 
 | ID | Tên test | Mô tả | Kết quả mong đợi |
 |---|---|---|---|
 | CH-01 | `chatsPageLoads` | Trang `/chats` load thành công | URL chứa `/chats` |
-| CH-02 | `chatsPageShowsConversationListOrEmptyState` | Hiển thị hội thoại hoặc loading | Một trong các trạng thái visible |
+| CH-02 | `chatsPageShowsConversationListOrEmptyState` | Hiển thị hội thoại hoặc trạng thái rỗng | Danh sách hội thoại hoặc "Chưa có hội thoại nào" visible |
 | CH-03 | `chatsPageRedirectsToLoginWhenNotAuthenticated` | Không có session → redirect | URL chứa `/auth/login` |
-| CH-04 | `openChatFromMatchesNavigatesToChats` | Bấm "Nhắn tin" từ Matches | Redirect sang `/chats?conversationId=...` |
-| CH-05 | `chatSearchInputIsPresent` | Trang chat load đúng | URL chứa `/chats` |
+| CH-04 | `selectConversationDisplaysMessages` | Click hội thoại → hiển thị tin nhắn | Chat box visible với tin nhắn hoặc trạng thái rỗng |
+| CH-05 | `sendTextMessageSuccessfully` | Gửi tin nhắn text | Tin nhắn xuất hiện trong chat |
+| CH-06 | `messageShowsDeliveryStatus` | Tin nhắn hiển thị trạng thái gửi | Status "Đang gửi", "Đã nhận", hoặc "Đã xem" visible |
+| CH-07 | `replyToMessageSuccessfully` | Reply tin nhắn → gửi reply | Reply quote xuất hiện, tin nhắn reply được gửi |
+| CH-08 | `addReactionToMessage` | Thêm emoji reaction vào tin nhắn | Reaction chip xuất hiện trên tin nhắn |
+| CH-09 | `searchMessagesInConversation` | Tìm kiếm tin nhắn trong hội thoại | Trang vẫn ở `/chats` sau khi tìm |
+| CH-10 | `typingIndicatorAppears` | Gõ tin nhắn → typing indicator | Trang vẫn ở `/chats` khi gõ |
+| CH-11 | `uploadImageMessage` | Upload ảnh → gửi | Ảnh preview xuất hiện, tin nhắn ảnh được gửi |
+| CH-12 | `conversationListUpdatesAfterNewMessage` | Gửi tin nhắn → danh sách cập nhật | Preview tin nhắn mới xuất hiện trong danh sách |
+| CH-13 | `openChatFromMatchesNavigatesToChats` | Bấm "Nhắn tin" từ Matches | Redirect sang `/chats` |
+| CH-14 | `socketConnectionStatusDisplayed` | Trạng thái kết nối realtime hiển thị | Status indicator visible |
+| CH-15 | `clearSearchFiltersMessages` | Tìm kiếm rồi bỏ lọc | Trang vẫn ở `/chats` sau khi bỏ lọc |
 
 ---
 
@@ -269,7 +279,7 @@ Dùng `APIRequestContext` gọi thẳng backend, không qua trình duyệt. Mỗ
 | E2E UI (Auth: Login + Register + Redirect) | 6 |
 | E2E UI (Discover) | 7 |
 | E2E UI (Matches) | 4 |
-| E2E UI (Chats) | 5 |
+| E2E UI (Chats) | 15 |
 | E2E UI (Stories) | 6 |
 | E2E UI (Notifications) | 6 |
 | E2E UI (ProfileEdit) | 6 |
@@ -279,7 +289,7 @@ Dùng `APIRequestContext` gọi thẳng backend, không qua trình duyệt. Mỗ
 | API (Conversations) | 13 |
 | API (Stories) | 9 |
 | API (Notifications) | 6 |
-| **Tổng** | **104** |
+| **Tổng** | **119** |
 
 ---
 
