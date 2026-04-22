@@ -499,6 +499,7 @@ socket.on('group.message.reaction_updated', {
 - **Mô tả:** Update RealtimeGateway để support group chat events
 - **Ước tính:** 6 giờ
 - **Độ ưu tiên:** Critical
+- **Trạng thái:** ✅ COMPLETED
 - **Acceptance Criteria:**
   - ✅ group.join event
   - ✅ group.leave event
