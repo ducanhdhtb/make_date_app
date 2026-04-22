@@ -4,7 +4,7 @@ pipeline {
   // ── Tools — Jenkins sẽ tự download nếu chưa có ────────────────────────────
   tools {
     maven 'maven3'   // tên phải khớp với Manage Jenkins → Tools → Maven
-    jdk   'jdk17'    // tên phải khớp với Manage Jenkins → Tools → JDK
+    jdk   'JDK17'    // tên phải khớp với Manage Jenkins → Tools → JDK
   }
 
   // ── Configurable parameters ────────────────────────────────────────────────
