@@ -13,18 +13,22 @@ export class CloudinaryService {
   }
 
   async uploadImage(file: Express.Multer.File, folder: string) {
-    const base64 = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-    const result = await cloudinary.uploader.upload(base64, {
-      folder,
-      resource_type: 'image'
-    });
+    try {
+      const base64 = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      const result = await cloudinary.uploader.upload(base64, {
+        folder,
+        resource_type: 'image'
+      });
 
-    return {
-      publicId: result.public_id,
-      url: result.secure_url,
-      width: result.width,
-      height: result.height
-    };
+      return {
+        publicId: result.public_id,
+        url: result.secure_url,
+        width: result.width,
+        height: result.height
+      };
+    } catch (error) {
+      throw new Error(`Cloudinary upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   async uploadResource(
@@ -32,18 +36,22 @@ export class CloudinaryService {
     folder: string,
     resourceType: 'image' | 'video' | 'raw' | 'auto' = 'auto'
   ) {
-    const base64 = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-    const result = await cloudinary.uploader.upload(base64, {
-      folder,
-      resource_type: resourceType
-    });
+    try {
+      const base64 = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      const result = await cloudinary.uploader.upload(base64, {
+        folder,
+        resource_type: resourceType
+      });
 
-    return {
-      publicId: result.public_id,
-      url: result.secure_url,
-      bytes: result.bytes,
-      format: result.format,
-      resourceType: result.resource_type
-    };
+      return {
+        publicId: result.public_id,
+        url: result.secure_url,
+        bytes: result.bytes,
+        format: result.format,
+        resourceType: result.resource_type
+      };
+    } catch (error) {
+      throw new Error(`Cloudinary upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
