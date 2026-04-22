@@ -116,6 +116,60 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     return { ok: true };
   }
 
+  // Group Chat Events
+  @SubscribeMessage('group.join')
+  joinGroup(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { groupConversationId?: string }
+  ) {
+    const groupConversationId = body?.groupConversationId;
+    if (!groupConversationId) return { ok: false };
+    client.join(this.groupRoom(groupConversationId));
+    return { ok: true, groupConversationId };
+  }
+
+  @SubscribeMessage('group.leave')
+  leaveGroup(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { groupConversationId?: string }
+  ) {
+    const groupConversationId = body?.groupConversationId;
+    if (!groupConversationId) return { ok: false };
+    client.leave(this.groupRoom(groupConversationId));
+    return { ok: true, groupConversationId };
+  }
+
+  @SubscribeMessage('group.typing.start')
+  groupTypingStart(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { groupConversationId?: string; displayName?: string }
+  ) {
+    const groupConversationId = body?.groupConversationId;
+    const userId = client.data.user?.sub;
+    if (!groupConversationId || !userId) return { ok: false };
+    client.to(this.groupRoom(groupConversationId)).emit('group.typing.start', {
+      groupConversationId,
+      userId,
+      displayName: body?.displayName || 'Đối phương'
+    });
+    return { ok: true };
+  }
+
+  @SubscribeMessage('group.typing.stop')
+  groupTypingStop(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { groupConversationId?: string }
+  ) {
+    const groupConversationId = body?.groupConversationId;
+    const userId = client.data.user?.sub;
+    if (!groupConversationId || !userId) return { ok: false };
+    client.to(this.groupRoom(groupConversationId)).emit('group.typing.stop', {
+      groupConversationId,
+      userId
+    });
+    return { ok: true };
+  }
+
   emitMessageCreated(conversationId: string, payload: unknown) {
     this.server.to(this.conversationRoom(conversationId)).emit('message.new', payload);
   }
@@ -160,6 +214,39 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     });
   }
 
+  // Group Chat Emit Methods
+  emitGroupMessageCreated(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.message.new', payload);
+  }
+
+  emitGroupMessageDelivered(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.message.delivered', payload);
+  }
+
+  emitGroupMessageSeen(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.message.seen', payload);
+  }
+
+  emitGroupMessageUpdated(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.message.updated', payload);
+  }
+
+  emitGroupMessageReactionUpdated(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.message.reaction_updated', payload);
+  }
+
+  emitGroupMemberAdded(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.member.added', payload);
+  }
+
+  emitGroupMemberRemoved(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.member.removed', payload);
+  }
+
+  emitGroupUpdated(groupConversationId: string, payload: unknown) {
+    this.server.to(this.groupRoom(groupConversationId)).emit('group.updated', payload);
+  }
+
   private extractToken(client: Socket) {
     const authToken = typeof client.handshake.auth?.token === 'string'
       ? client.handshake.auth.token
@@ -178,5 +265,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private conversationRoom(conversationId: string) {
     return `conversation:${conversationId}`;
+  }
+
+  private groupRoom(groupConversationId: string) {
+    return `group:${groupConversationId}`;
   }
 }

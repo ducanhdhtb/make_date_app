@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { CreateGroupConversationDto } from './dto/create-group-conversation.dto';
 import { UpdateGroupConversationDto } from './dto/update-group-conversation.dto';
 import { AddMemberDto } from './dto/add-member.dto';
@@ -8,7 +9,10 @@ import { ListMembersQueryDto } from './dto/list-members.query.dto';
 
 @Injectable()
 export class GroupConversationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtimeGateway: RealtimeGateway,
+  ) {}
 
   async create(
     currentUserId: string,
@@ -45,7 +49,7 @@ export class GroupConversationsService {
             // Add other members
             ...dto.memberIds.map((userId) => ({
               userId,
-              role: 'member',
+              role: 'member' as const,
             })),
           ],
         },
@@ -64,6 +68,13 @@ export class GroupConversationsService {
           },
         },
       },
+    });
+
+    // Emit group created event to all members
+    this.realtimeGateway.emitGroupUpdated(group.id, {
+      groupConversationId: group.id,
+      group,
+      action: 'created',
     });
 
     return group;
@@ -113,7 +124,7 @@ export class GroupConversationsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: any = {
       members: {
         some: {
           userId: currentUserId,
@@ -122,7 +133,7 @@ export class GroupConversationsService {
     };
 
     if (query.search) {
-      where['name'] = {
+      where.name = {
         contains: query.search,
         mode: 'insensitive',
       };
@@ -183,11 +194,11 @@ export class GroupConversationsService {
 
     // Check if user is owner or admin
     const member = group.members.find((m) => m.userId === currentUserId);
-    if (member.role !== 'owner' && member.role !== 'admin') {
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
       throw new ForbiddenException('Only owner or admin can update group');
     }
 
-    return this.prisma.groupConversation.update({
+    const updatedGroup = await this.prisma.groupConversation.update({
       where: { id: groupId },
       data: {
         name: dto.name,
@@ -208,6 +219,15 @@ export class GroupConversationsService {
         },
       },
     });
+
+    // Emit group updated event
+    this.realtimeGateway.emitGroupUpdated(groupId, {
+      groupConversationId: groupId,
+      group: updatedGroup,
+      action: 'updated',
+    });
+
+    return updatedGroup;
   }
 
   async delete(currentUserId: string, groupId: string) {
@@ -215,7 +235,7 @@ export class GroupConversationsService {
 
     // Check if user is owner
     const member = group.members.find((m) => m.userId === currentUserId);
-    if (member.role !== 'owner') {
+    if (!member || member.role !== 'owner') {
       throw new ForbiddenException('Only owner can delete group');
     }
 
@@ -233,7 +253,7 @@ export class GroupConversationsService {
 
     // Check if user is owner or admin
     const member = group.members.find((m) => m.userId === currentUserId);
-    if (member.role !== 'owner' && member.role !== 'admin') {
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
       throw new ForbiddenException('Only owner or admin can add members');
     }
 
@@ -252,7 +272,7 @@ export class GroupConversationsService {
       throw new BadRequestException('User is already a member');
     }
 
-    return this.prisma.groupConversationMember.create({
+    const newMember = await this.prisma.groupConversationMember.create({
       data: {
         groupConversationId: groupId,
         userId: dto.userId,
@@ -269,6 +289,15 @@ export class GroupConversationsService {
         },
       },
     });
+
+    // Emit member added event
+    this.realtimeGateway.emitGroupMemberAdded(groupId, {
+      groupConversationId: groupId,
+      member: newMember,
+      user: newMember.user,
+    });
+
+    return newMember;
   }
 
   async removeMember(
@@ -280,12 +309,15 @@ export class GroupConversationsService {
 
     // Check if user is owner or admin
     const member = group.members.find((m) => m.userId === currentUserId);
-    if (member.role !== 'owner' && member.role !== 'admin') {
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
       throw new ForbiddenException('Only owner or admin can remove members');
     }
 
     // Cannot remove owner
     const memberToRemove = group.members.find((m) => m.userId === userId);
+    if (!memberToRemove) {
+      throw new NotFoundException('Member not found');
+    }
     if (memberToRemove.role === 'owner') {
       throw new BadRequestException('Cannot remove owner from group');
     }
@@ -297,6 +329,12 @@ export class GroupConversationsService {
           userId,
         },
       },
+    });
+
+    // Emit member removed event
+    this.realtimeGateway.emitGroupMemberRemoved(groupId, {
+      groupConversationId: groupId,
+      userId,
     });
 
     // If group has no members, delete it
@@ -322,12 +360,12 @@ export class GroupConversationsService {
     const limit = query.limit || 20;
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: any = {
       groupConversationId: groupId,
     };
 
     if (query.search) {
-      where['user'] = {
+      where.user = {
         displayName: {
           contains: query.search,
           mode: 'insensitive',
@@ -369,6 +407,9 @@ export class GroupConversationsService {
 
     // Check if user is owner
     const member = group.members.find((m) => m.userId === currentUserId);
+    if (!member) {
+      throw new NotFoundException('You are not a member of this group');
+    }
     if (member.role === 'owner') {
       throw new BadRequestException('Owner cannot leave group. Transfer ownership first.');
     }
@@ -380,6 +421,12 @@ export class GroupConversationsService {
           userId: currentUserId,
         },
       },
+    });
+
+    // Emit member removed event
+    this.realtimeGateway.emitGroupMemberRemoved(groupId, {
+      groupConversationId: groupId,
+      userId: currentUserId,
     });
 
     // If group has no members, delete it

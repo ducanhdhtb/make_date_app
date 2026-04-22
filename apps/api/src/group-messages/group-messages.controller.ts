@@ -49,8 +49,8 @@ export class GroupMessagesController {
       throw new Error('File is required');
     }
 
-    const mediaUrl = await this.cloudinary.uploadImage(file);
-    return this.service.sendImage(userId, groupId, mediaUrl, dto);
+    const uploadResult = await this.cloudinary.uploadImage(file, 'group-messages');
+    return this.service.sendImage(userId, groupId, uploadResult.url, dto);
   }
 
   @Post('attachment')
@@ -65,8 +65,8 @@ export class GroupMessagesController {
       throw new Error('File is required');
     }
 
-    const mediaUrl = await this.cloudinary.uploadResource(file);
-    return this.service.sendImage(userId, groupId, mediaUrl, dto);
+    const uploadResult = await this.cloudinary.uploadResource(file, 'group-attachments');
+    return this.service.sendImage(userId, groupId, uploadResult.url, dto);
   }
 
   @Get()

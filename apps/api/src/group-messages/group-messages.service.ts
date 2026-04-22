@@ -1,12 +1,16 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { CreateGroupMessageDto } from './dto/create-group-message.dto';
 import { ListGroupMessagesQueryDto } from './dto/list-group-messages.query.dto';
 import { AddReactionDto } from './dto/add-reaction.dto';
 
 @Injectable()
 export class GroupMessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtimeGateway: RealtimeGateway,
+  ) {}
 
   async sendMessage(
     currentUserId: string,
@@ -83,6 +87,12 @@ export class GroupMessagesService {
       },
     });
 
+    // Emit new message event
+    this.realtimeGateway.emitGroupMessageCreated(groupId, {
+      groupConversationId: groupId,
+      message,
+    });
+
     return message;
   }
 
@@ -139,6 +149,12 @@ export class GroupMessagesService {
       },
     });
 
+    // Emit new message event
+    this.realtimeGateway.emitGroupMessageCreated(groupId, {
+      groupConversationId: groupId,
+      message,
+    });
+
     return message;
   }
 
@@ -162,20 +178,20 @@ export class GroupMessagesService {
     }
 
     const limit = query.limit || 20;
-    const where = {
+    const where: any = {
       groupConversationId: groupId,
       deletedAt: null,
     };
 
     if (query.search) {
-      where['textContent'] = {
+      where.textContent = {
         contains: query.search,
         mode: 'insensitive',
       };
     }
 
     if (query.before) {
-      where['createdAt'] = {
+      where.createdAt = {
         lt: new Date(query.before),
       };
     }
@@ -244,7 +260,7 @@ export class GroupMessagesService {
       throw new ForbiddenException('You can only delete your own messages');
     }
 
-    return this.prisma.groupMessage.update({
+    const deletedMessage = await this.prisma.groupMessage.update({
       where: { id: messageId },
       data: { deletedAt: new Date() },
       include: {
@@ -252,6 +268,15 @@ export class GroupMessagesService {
         reactions: true,
       },
     });
+
+    // Emit message updated event
+    this.realtimeGateway.emitGroupMessageUpdated(groupId, {
+      groupConversationId: groupId,
+      message: deletedMessage,
+      action: 'deleted',
+    });
+
+    return deletedMessage;
   }
 
   async recallMessage(
@@ -271,7 +296,7 @@ export class GroupMessagesService {
       throw new ForbiddenException('You can only recall your own messages');
     }
 
-    return this.prisma.groupMessage.update({
+    const recalledMessage = await this.prisma.groupMessage.update({
       where: { id: messageId },
       data: { recalledAt: new Date() },
       include: {
@@ -279,6 +304,15 @@ export class GroupMessagesService {
         reactions: true,
       },
     });
+
+    // Emit message updated event
+    this.realtimeGateway.emitGroupMessageUpdated(groupId, {
+      groupConversationId: groupId,
+      message: recalledMessage,
+      action: 'recalled',
+    });
+
+    return recalledMessage;
   }
 
   async addReaction(
@@ -340,6 +374,13 @@ export class GroupMessagesService {
       },
     });
 
+    // Emit reaction updated event
+    this.realtimeGateway.emitGroupMessageReactionUpdated(groupId, {
+      groupConversationId: groupId,
+      messageId,
+      reactions,
+    });
+
     return reactions;
   }
 
@@ -382,6 +423,13 @@ export class GroupMessagesService {
       },
     });
 
+    // Emit reaction updated event
+    this.realtimeGateway.emitGroupMessageReactionUpdated(groupId, {
+      groupConversationId: groupId,
+      messageId,
+      reactions,
+    });
+
     return reactions;
   }
 
@@ -413,7 +461,7 @@ export class GroupMessagesService {
       throw new NotFoundException('Message not found');
     }
 
-    return this.prisma.groupMessage.update({
+    const pinnedMessage = await this.prisma.groupMessage.update({
       where: { id: messageId },
       data: { pinnedAt: new Date() },
       include: {
@@ -421,6 +469,15 @@ export class GroupMessagesService {
         reactions: true,
       },
     });
+
+    // Emit message updated event
+    this.realtimeGateway.emitGroupMessageUpdated(groupId, {
+      groupConversationId: groupId,
+      message: pinnedMessage,
+      action: 'pinned',
+    });
+
+    return pinnedMessage;
   }
 
   async unpinMessage(
@@ -451,7 +508,7 @@ export class GroupMessagesService {
       throw new NotFoundException('Message not found');
     }
 
-    return this.prisma.groupMessage.update({
+    const unpinnedMessage = await this.prisma.groupMessage.update({
       where: { id: messageId },
       data: { pinnedAt: null },
       include: {
@@ -459,5 +516,14 @@ export class GroupMessagesService {
         reactions: true,
       },
     });
+
+    // Emit message updated event
+    this.realtimeGateway.emitGroupMessageUpdated(groupId, {
+      groupConversationId: groupId,
+      message: unpinnedMessage,
+      action: 'unpinned',
+    });
+
+    return unpinnedMessage;
   }
 }

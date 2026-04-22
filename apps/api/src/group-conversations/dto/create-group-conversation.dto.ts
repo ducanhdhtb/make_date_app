@@ -4,7 +4,7 @@ export class CreateGroupConversationDto {
   @IsString()
   @MinLength(3)
   @MaxLength(100)
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsString()
@@ -17,5 +17,5 @@ export class CreateGroupConversationDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  memberIds: string[];
+  memberIds!: string[];
 }
