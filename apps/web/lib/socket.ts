@@ -19,18 +19,40 @@ function setState(next: SocketConnectionState) {
 }
 
 function bindSocketEvents(instance: Socket) {
-  instance.on('connect', () => setState('connected'));
-  instance.on('disconnect', () => setState('disconnected'));
-  instance.on('connect_error', () => setState('error'));
-  instance.io.on('reconnect_attempt', () => setState('reconnecting'));
-  instance.io.on('reconnect', () => setState('connected'));
+  instance.on('connect', () => {
+    console.log('[Socket] Connected');
+    setState('connected');
+  });
+  instance.on('disconnect', () => {
+    console.log('[Socket] Disconnected');
+    setState('disconnected');
+  });
+  instance.on('connect_error', (error) => {
+    console.error('[Socket] Connection error:', error);
+    setState('error');
+  });
+  instance.on('error', (error) => {
+    console.error('[Socket] Error:', error);
+  });
+  instance.io.on('reconnect_attempt', () => {
+    console.log('[Socket] Reconnecting...');
+    setState('reconnecting');
+  });
+  instance.io.on('reconnect', () => {
+    console.log('[Socket] Reconnected');
+    setState('connected');
+  });
 }
 
 export function getSocketClient() {
   const token = getAccessToken();
-  if (!token) return null;
+  if (!token) {
+    console.warn('[Socket] No access token available');
+    return null;
+  }
 
   if (!socket) {
+    console.log('[Socket] Creating new socket connection');
     socket = io(`${getSocketBaseUrl()}/realtime`, {
       transports: ['websocket', 'polling'],
       autoConnect: false,
@@ -42,10 +64,18 @@ export function getSocketClient() {
     });
     bindSocketEvents(socket);
   } else {
-    socket.auth = { token };
+    // Update token if it changed
+    if (socket.auth?.token !== token) {
+      console.log('[Socket] Token updated, reconnecting...');
+      socket.auth = { token };
+      if (socket.connected) {
+        socket.disconnect();
+      }
+    }
   }
 
-  if (!socket.connected) {
+  if (!socket.connected && !socket.connecting) {
+    console.log('[Socket] Connecting...');
     setState(socket.active ? 'reconnecting' : 'connecting');
     socket.connect();
   }
@@ -55,6 +85,7 @@ export function getSocketClient() {
 
 export function disconnectSocketClient() {
   if (socket) {
+    console.log('[Socket] Disconnecting');
     socket.disconnect();
     socket = null;
     setState('idle');
@@ -73,6 +104,7 @@ export function getSocketState() {
 
 export function reconnectSocketClient() {
   if (!socket) return getSocketClient();
+  console.log('[Socket] Manual reconnect');
   setState('reconnecting');
   socket.connect();
   return socket;

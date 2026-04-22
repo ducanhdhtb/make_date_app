@@ -36,6 +36,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const token = this.extractToken(client);
       if (!token) {
+        console.warn('[Realtime] No token provided, disconnecting');
         client.emit('error.message', { message: 'Unauthorized socket connection' });
         client.disconnect();
         return;
@@ -46,14 +47,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       });
       client.data.user = payload;
       client.join(this.userRoom(payload.sub));
+      console.log(`[Realtime] User ${payload.email} connected (${client.id})`);
       client.emit('socket.ready', { userId: payload.sub });
-    } catch {
+    } catch (error) {
+      console.error('[Realtime] Connection error:', error instanceof Error ? error.message : error);
       client.emit('error.message', { message: 'Unauthorized socket connection' });
       client.disconnect();
     }
   }
 
-  handleDisconnect(_client: Socket) {}
+  handleDisconnect(client: Socket) {
+    const user = client.data.user as SocketUser | undefined;
+    if (user) {
+      console.log(`[Realtime] User ${user.email} disconnected (${client.id})`);
+    }
+  }
 
   @SubscribeMessage('conversation.join')
   joinConversation(
