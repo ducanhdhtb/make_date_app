@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BottomNav } from '@/components/layout';
+import { CreateGroupModal } from '@/components/create-group-modal';
+import { GroupInfoSidebar } from '@/components/group-info-sidebar';
 import { apiFetch } from '@/lib/api';
 import { getStoredUser } from '@/lib/auth';
 import { getSocketClient, subscribeSocketState } from '@/lib/socket';
@@ -145,6 +147,11 @@ export default function GroupChatsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGroupCreated = (groupId: string) => {
+    loadGroups();
+    setSelectedGroupId(groupId);
   };
 
   const loadMessages = async (groupId: string) => {
@@ -616,40 +623,22 @@ export default function GroupChatsPage() {
         </div>
       </div>
 
-      {/* Create Group Modal - Placeholder */}
-      {showCreateModal ? (
-        <div 
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
-            background: 'rgba(0,0,0,0.5)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            zIndex: 1000
-          }}
-          onClick={() => setShowCreateModal(false)}
-        >
-          <div 
-            className="card" 
-            style={{ maxWidth: 500, width: '90%' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0 }}>Tạo nhóm mới</h2>
-            <p className="muted">Tính năng đang phát triển...</p>
-            <button 
-              className="btn btn-outline" 
-              type="button"
-              onClick={() => setShowCreateModal(false)}
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <CreateGroupModal 
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onGroupCreated={handleGroupCreated}
+      />
+
+      <GroupInfoSidebar
+        group={selectedGroup}
+        isOpen={showGroupInfo}
+        onClose={() => setShowGroupInfo(false)}
+        onGroupUpdated={(updatedGroup) => {
+          setGroups((prev) =>
+            prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g))
+          );
+        }}
+      />
 
       {/* Group Info Sidebar - Placeholder */}
       {showGroupInfo && selectedGroup ? (
