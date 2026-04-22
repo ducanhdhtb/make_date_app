@@ -19,6 +19,11 @@ export class AuthService {
     if (existing) throw new BadRequestException('Email already exists');
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    
+    // Default location: Hanoi, Vietnam
+    const defaultLatitude = 21.0285;
+    const defaultLongitude = 105.8542;
+    
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -27,6 +32,9 @@ export class AuthService {
         birthDate: new Date(dto.birthDate),
         gender: dto.gender,
         interestedIn: dto.interestedIn,
+        latitude: defaultLatitude,
+        longitude: defaultLongitude,
+        isLocationPrecise: false,
         lastActiveAt: new Date()
       }
     });
