@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum InterestedIn {
+  male
+  female
+  everyone
+}
+
+enum MatchStatus {
+  active
+  unmatched
+  blocked
+}
+
+enum StoryMediaType {
+  image
+  text
+}
+
+enum ShareTargetType {
+  profile
+  story
+}
+
+enum ConversationType {
+  direct
+}
+
+enum MessageType {
+  text
+  image
+  file
+  audio
+}
+
+enum NotificationType {
+  match_created
+  new_message
+  new_like
+  story_reaction
+  system
+}
+
+enum ReportStatus {
+  open
+  reviewed
+  rejected
+  actioned
+}
+
+model User {
+  id                String                    @id @default(uuid())
+  email             String                    @unique
+  phone             String?                   @unique
+  passwordHash      String
+  displayName       String
+  birthDate         DateTime
+  gender            Gender
+  interestedIn      InterestedIn
+  bio               String?
+  jobTitle          String?
+  avatarUrl         String?
+  city              String?
+  latitude          Decimal?                  @db.Decimal(9, 6)
+  longitude         Decimal?                  @db.Decimal(9, 6)
+  isLocationPrecise Boolean                   @default(false)
+  isStoryPublic     Boolean                   @default(true)
+  lastActiveAt      DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  photos            UserPhoto[]
+  interests         UserInterest[]
+  stories           Story[]
+  likesSent         Like[]                    @relation("likes_sent")
+  likesReceived     Like[]                    @relation("likes_received")
+  matchesAsUser1    Match[]                   @relation("match_user_1")
+  matchesAsUser2    Match[]                   @relation("match_user_2")
+  shares            Share[]
+  blocksInitiated   Block[]                   @relation("blocker")
+  blocksReceived    Block[]                   @relation("blocked")
+  reportsFiled      Report[]                  @relation("reporter")
+  reportsAgainst    Report[]                  @relation("reported_user")
+  conversationLinks ConversationParticipant[]
+  messages          Message[]
+  messageReceipts   MessageReceipt[]
+  notifications     Notification[]
+  messageReactions  MessageReaction[]
+
+  @@index([latitude, longitude])
+  @@index([lastActiveAt])
+}
+
+model UserPhoto {
+  id        String   @id @default(uuid())
+  userId    String
+  photoUrl  String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, sortOrder])
+}
+
+model UserInterest {
+  id           String @id @default(uuid())
+  userId       String
+  interestName String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, interestName])
+}
+
+model Like {
+  id         String   @id @default(uuid())
+  fromUserId String
+  toUserId   String
+  createdAt  DateTime @default(now())
+
+  fromUser User @relation("likes_sent", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("likes_received", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+}
+
+model Match {
+  id        String      @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  status    MatchStatus @default(active)
+  matchedAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user1 User @relation("match_user_1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2 User @relation("match_user_2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+}
+
+model Story {
+  id          String         @id @default(uuid())
+  userId      String
+  mediaType   StoryMediaType
+  mediaUrl    String?
+  textContent String?
+  caption     String?
+  createdAt   DateTime       @default(now())
+  expiresAt   DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Share {
+  id         String          @id @default(uuid())
+  userId     String
+  targetType ShareTargetType
+  targetId   String
+  channel    String
+  createdAt  DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+}
+
+model Block {
+  id            String   @id @default(uuid())
+  blockerUserId String
+  blockedUserId String
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  blocker User @relation("blocker", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blocked User @relation("blocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerUserId, blockedUserId])
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  reporterUserId String
+  reportedUserId String?
+  targetType     String
+  targetId       String?
+  reason         String
+  details        String?
+  status         ReportStatus @default(open)
+  createdAt      DateTime     @default(now())
+
+  reporter     User  @relation("reporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  reportedUser User? @relation("reported_user", fields: [reportedUserId], references: [id], onDelete: SetNull)
+
+  @@index([targetType, targetId])
+  @@index([status, createdAt])
+}
+
+model Conversation {
+  id           String                    @id @default(uuid())
+  type         ConversationType          @default(direct)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([updatedAt])
+}
+
+model MessageReceipt {
+  id          String   @id @default(uuid())
+  messageId   String
+  userId      String
+  deliveredAt DateTime?
+  seenAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, deliveredAt, seenAt])
+}
+
+model ConversationParticipant {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime @default(now())
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, joinedAt])
+}
+
+model Message {
+  id               String      @id @default(uuid())
+  conversationId   String
+  senderUserId     String
+  parentMessageId  String?
+  messageType      MessageType @default(text)
+  textContent      String?
+  mediaUrl         String?
+  fileName         String?
+  mimeType         String?
+  fileSize         Int?
+  durationSeconds  Int?
+  forwardedFromMessageId String?
+  pinnedAt         DateTime?
+  createdAt        DateTime    @default(now())
+  deliveredAt      DateTime?
+  seenAt           DateTime?
+  recalledAt       DateTime?
+  deletedAt        DateTime?
+
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  parentMessage  Message?          @relation("MessageReply", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies        Message[]         @relation("MessageReply")
+  forwardedFromMessage Message?     @relation("MessageForward", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
+  forwardedMessages Message[]       @relation("MessageForward")
+  receipts       MessageReceipt[]
+  reactions      MessageReaction[]
+
+  @@index([conversationId, createdAt])
+  @@index([parentMessageId])
+  @@index([forwardedFromMessageId])
+  @@index([conversationId, pinnedAt])
+}
+
+model MessageReaction {
+  id         String   @id @default(uuid())
+  messageId   String
+  userId      String
+  emoji       String
+  createdAt   DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId, createdAt])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  type        NotificationType
+  title       String
+  body        String?
+  data        Json?
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  readAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+}

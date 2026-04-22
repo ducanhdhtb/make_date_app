@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dating-app-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dating_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    image: node:20
+    container_name: dating-app-api
+    depends_on:
+      - postgres
+    working_dir: /app
+    volumes:
+      - ./apps/api:/app
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dating_app
+      JWT_ACCESS_SECRET: super-secret-access
+      JWT_ACCESS_EXPIRES_IN: 7d
+      CLOUDINARY_CLOUD_NAME: your-cloud-name
+      CLOUDINARY_API_KEY: your-api-key
+      CLOUDINARY_API_SECRET: your-api-secret
+      CHOKIDAR_USEPOLLING: 'true'
+    command: >
+      sh -c "npm install &&
+      npx prisma generate &&
+      npx prisma db push &&
+      npm run prisma:seed &&
+      npm run start:dev"
+    ports:
+      - '3001:3001'
+
+  web:
+    image: node:20
+    container_name: dating-app-web
+    depends_on:
+      - api
+    working_dir: /app
+    volumes:
+      - ./apps/web:/app
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3001/api
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3001
+      CHOKIDAR_USEPOLLING: 'true'
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - '3002:3000'
+
+volumes:
+  postgres_data:

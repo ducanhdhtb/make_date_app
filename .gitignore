@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+
+# Build outputs
+apps/api/dist/
+e2e-playwright-java/target/
+
+# Environment files (keep .env.example, ignore actual secrets)
+apps/api/.env
+apps/web/.env
+
+# Playwright MCP snapshots/logs (dev artifacts)
+.playwright-mcp/
+
+# Misc
+*.log
+file-list.txt
+11.12.1
+7.7.0
+next
+ts-node
+dating-app-api@0.3.0
+dating-app-web@0.2.0
