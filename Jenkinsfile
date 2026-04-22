@@ -111,17 +111,27 @@ pipeline {
         def failedTests = []
 
         try {
-          def xmlFiles = findFiles(glob: 'e2e-playwright-java/target/surefire-reports/TEST-*.xml')
-          xmlFiles.each { f ->
-            def xml = readFile(f.path)
-            def suite = new XmlSlurper().parseText(xml)
-            passed  += (suite.@tests.toInteger()  ?: 0) - (suite.@failures.toInteger() ?: 0) - (suite.@errors.toInteger() ?: 0) - (suite.@skipped.toInteger() ?: 0)
-            failed  += (suite.@failures.toInteger() ?: 0) + (suite.@errors.toInteger() ?: 0)
-            skipped += (suite.@skipped.toInteger() ?: 0)
-            suite.testcase.each { tc ->
-              if (tc.failure.size() > 0 || tc.error.size() > 0) {
-                def msg = tc.failure.size() > 0 ? tc.failure.@message.text() : tc.error.@message.text()
-                failedTests << [name: "${tc.@classname}.${tc.@name}", message: msg?.take(300) ?: 'No details']
+          // Dùng sh + find thay vì findFiles (không cần plugin)
+          def xmlFilesStr = sh(
+            script: 'find e2e-playwright-java/target/surefire-reports -name "TEST-*.xml" 2>/dev/null || true',
+            returnStdout: true
+          ).trim()
+          
+          if (xmlFilesStr) {
+            def xmlFiles = xmlFilesStr.split('\n')
+            xmlFiles.each { filePath ->
+              if (filePath && fileExists(filePath)) {
+                def xml = readFile(filePath)
+                def suite = new XmlSlurper().parseText(xml)
+                passed  += (suite.@tests.toInteger()  ?: 0) - (suite.@failures.toInteger() ?: 0) - (suite.@errors.toInteger() ?: 0) - (suite.@skipped.toInteger() ?: 0)
+                failed  += (suite.@failures.toInteger() ?: 0) + (suite.@errors.toInteger() ?: 0)
+                skipped += (suite.@skipped.toInteger() ?: 0)
+                suite.testcase.each { tc ->
+                  if (tc.failure.size() > 0 || tc.error.size() > 0) {
+                    def msg = tc.failure.size() > 0 ? tc.failure.@message.text() : tc.error.@message.text()
+                    failedTests << [name: "${tc.@classname}.${tc.@name}", message: msg?.take(300) ?: 'No details']
+                  }
+                }
               }
             }
           }
