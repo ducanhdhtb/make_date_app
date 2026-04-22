@@ -309,7 +309,12 @@ export default function ChatsPage() {
     loadConversations();
   }, []);
 
-  useEffect(() => subscribeSocketState(setSocketState), []);
+  useEffect(() => {
+    const unsubscribe = subscribeSocketState(setSocketState);
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedId) {
@@ -825,7 +830,12 @@ export default function ChatsPage() {
                     {typingNames.length ? <div className="typing-indicator">{formatTypingLabel(typingNames)}</div> : null}
                   </div>
                 </div>
-                <SafetyActions targetUserId={selectedTarget.id} targetLabel={selectedTarget.displayName} showBlock showReport reportContext={{ targetType: 'message', targetId: selectedId }} />
+                <SafetyActions 
+                  targetUserId={selectedTarget.id} 
+                  targetUserName={selectedTarget.displayName} 
+                  reportTargetType="message" 
+                  reportTargetId={selectedId} 
+                />
               </div>
 
               {pinnedMessages.length ? (
@@ -850,7 +860,7 @@ export default function ChatsPage() {
                 <div style={{ height: topSpacerHeight }} />
                 {visibleMessages.map((message) => {
                   const mine = message.sender.id === currentUser?.id;
-                  const actionDisabled = Boolean(message.isPending || message.isFailed || message.recalledAt || message.deletedAt);
+                  const actionDisabled = Boolean((message as any).isPending || (message as any).isFailed || message.recalledAt || message.deletedAt);
                   return (
                     <div id={`msg-${message.id}`} key={message.id} className={mine ? 'chat-bubble mine' : 'chat-bubble'}>
                       <div style={{ fontSize: 12, marginBottom: 4, opacity: 0.75 }}>{mine ? 'Bạn' : message.sender.displayName}</div>
@@ -869,7 +879,7 @@ export default function ChatsPage() {
                       {message.messageType === 'image' && message.mediaUrl ? (
                         <div style={{ display: 'grid', gap: 8 }}>
                           <a href={message.mediaUrl} target="_blank" rel="noreferrer">
-                            <Image src={message.localPreviewUrl || message.mediaUrl} alt="Ảnh chat" width={220} height={220} className="chat-image" unoptimized />
+                            <Image src={(message as any).localPreviewUrl || message.mediaUrl} alt="Ảnh chat" width={220} height={220} className="chat-image" unoptimized />
                           </a>
                           {message.textContent ? <div>{message.textContent}</div> : null}
                         </div>
@@ -904,15 +914,15 @@ export default function ChatsPage() {
                               ))}
                             </div>
                           ) : null}
-                          {message.isFailed ? (
+                          {(message as any).isFailed ? (
                             <>
-                              <button className="btn btn-outline btn-xs" type="button" onClick={() => resendFailedMessage(message.pendingDraftId!)}>Gửi lại</button>
-                              <button className="btn btn-outline btn-xs" type="button" onClick={() => removePendingMessage(message.pendingDraftId!)}>Bỏ</button>
+                              <button className="btn btn-outline btn-xs" type="button" onClick={() => resendFailedMessage((message as any).pendingDraftId!)}>Gửi lại</button>
+                              <button className="btn btn-outline btn-xs" type="button" onClick={() => removePendingMessage((message as any).pendingDraftId!)}>Bỏ</button>
                             </>
                           ) : (
                             <div className="message-actions">
                               {reactionPalette().map((emoji) => (
-                                <button key={`${message.id}-quick-${emoji}`} className={`btn btn-outline btn-xs ${(message.reactions || []).some((item) => item.emoji === emoji && item.reacted) ? 'reaction-active-btn' : ''}`} type="button" disabled={Boolean(message.deletedAt || message.recalledAt || message.isPending)} onClick={() => toggleReaction(message, emoji)}>{emoji}</button>
+                                <button key={`${message.id}-quick-${emoji}`} className={`btn btn-outline btn-xs ${(message.reactions || []).some((item) => item.emoji === emoji && item.reacted) ? 'reaction-active-btn' : ''}`} type="button" disabled={Boolean(message.deletedAt || message.recalledAt || (message as any).isPending)} onClick={() => toggleReaction(message, emoji)}>{emoji}</button>
                               ))}
                               <button className="btn btn-outline btn-xs" type="button" onClick={() => copyMessage(message)}>Copy</button>
                               <button className="btn btn-outline btn-xs" type="button" disabled={Boolean(message.deletedAt || message.recalledAt)} onClick={() => setReplyTo(message)}>Reply</button>

@@ -1,0 +1,173 @@
+pipeline {
+  agent any
+
+  tools {
+    maven 'maven3'
+  }
+
+  parameters {
+    string(name: 'BASE_URL', defaultValue: 'http://localhost:3002', description: 'Web app URL')
+    booleanParam(name: 'HEADLESS', defaultValue: true, description: 'Run browser headless')
+  }
+
+  environment {
+    AUTOMATION_REPO   = 'https://github.com/ducanhdhtb/make_data_app_automation.git'
+    AUTOMATION_BRANCH = 'main'
+    AUTOMATION_DIR    = 'make_data_app_automation'
+    NOTIFY_EMAIL      = 'ducanhdhtb@gmail.com'
+
+    ALLURE_RESULTS    = "${AUTOMATION_DIR}/target/allure-results"
+    ALLURE_REPORT     = "${AUTOMATION_DIR}/target/allure-report"
+  }
+
+  triggers {
+    githubPush()
+  }
+
+  options {
+    timestamps()
+    timeout(time: 30, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+    disableConcurrentBuilds()
+  }
+
+  stages {
+    stage('Checkout Web Repo') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Check Web App') {
+      steps {
+        sh '''
+          echo "Checking ${BASE_URL}"
+          curl -I --max-time 10 ${BASE_URL}
+        '''
+      }
+    }
+
+    stage('Checkout Automation Repo') {
+      steps {
+        dir("${AUTOMATION_DIR}") {
+          deleteDir()
+          git branch: "${AUTOMATION_BRANCH}",
+              credentialsId: 'github-pat',
+              url: "${AUTOMATION_REPO}"
+        }
+      }
+    }
+
+    stage('Verify Environment') {
+      steps {
+        sh 'java -version || true'
+        sh 'mvn -version'
+      }
+    }
+
+    stage('Install Playwright Browsers') {
+      steps {
+        dir("${AUTOMATION_DIR}") {
+          sh '''
+            mvn generate-test-resources -q \
+              -DbaseUrl="${BASE_URL}" \
+              -Dheadless="${HEADLESS}"
+          '''
+        }
+      }
+    }
+
+    stage('Run Smoke Tests') {
+      steps {
+        dir("${AUTOMATION_DIR}") {
+          catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+            sh '''
+              mvn clean test -Pui \
+                -DbaseUrl="${BASE_URL}" \
+                -Dheadless="${HEADLESS}" \
+                -Dgroups=smoke \
+                -Dsurefire.failIfNoSpecifiedTests=false
+            '''
+          }
+        }
+      }
+      post {
+        always {
+          junit(
+            testResults: "${AUTOMATION_DIR}/target/surefire-reports/*.xml",
+            allowEmptyResults: true
+          )
+        }
+      }
+    }
+
+    stage('Generate Allure Report') {
+      steps {
+        dir("${AUTOMATION_DIR}") {
+          sh 'mvn allure:report -q'
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      allure([
+        includeProperties: false,
+        jdk: '',
+        results: [[path: "${ALLURE_RESULTS}"]],
+        report: "${ALLURE_REPORT}"
+      ])
+
+      archiveArtifacts(
+        artifacts: "${AUTOMATION_DIR}/target/allure-results/**,${AUTOMATION_DIR}/target/surefire-reports/**",
+        allowEmptyArchive: true
+      )
+    }
+
+    success {
+      emailext(
+        to: "${NOTIFY_EMAIL}",
+        subject: "[SMOKE SUCCESS] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """
+Smoke test thành công
+
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+URL: ${env.BUILD_URL}
+Target: ${params.BASE_URL}
+""".stripIndent()
+      )
+    }
+
+    unstable {
+      emailext(
+        to: "${NOTIFY_EMAIL}",
+        subject: "[SMOKE UNSTABLE] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """
+Smoke test unstable
+
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+URL: ${env.BUILD_URL}
+Target: ${params.BASE_URL}
+""".stripIndent()
+      )
+    }
+
+    failure {
+      emailext(
+        to: "${NOTIFY_EMAIL}",
+        subject: "[SMOKE FAILURE] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """
+Smoke test thất bại
+
+Job: ${env.JOB_NAME}
+Build: #${env.BUILD_NUMBER}
+URL: ${env.BUILD_URL}
+Target: ${params.BASE_URL}
+""".stripIndent()
+      )
+    }
+  }
+}
