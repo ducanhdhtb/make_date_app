@@ -104,39 +104,60 @@ pipeline {
       )
 
       script {
-        // Đọc kết quả từ JUnit XML thay vì getRawBuild (không cần approve)
+        // Lấy kết quả test từ XML files
         def passed  = 0
         def failed  = 0
         def skipped = 0
+        def total   = 0
         def failedTests = []
 
         try {
-          // Dùng sh + find thay vì findFiles (không cần plugin)
-          def xmlFilesStr = sh(
-            script: 'find e2e-playwright-java/target/surefire-reports -name "TEST-*.xml" 2>/dev/null || true',
+          // List all XML files
+          def xmlList = sh(
+            script: 'ls e2e-playwright-java/target/surefire-reports/TEST-*.xml 2>/dev/null || echo ""',
             returnStdout: true
           ).trim()
           
-          if (xmlFilesStr) {
-            def xmlFiles = xmlFilesStr.split('\n')
-            xmlFiles.each { filePath ->
-              if (filePath && fileExists(filePath)) {
-                def xml = readFile(filePath)
-                def suite = new XmlSlurper().parseText(xml)
-                passed  += (suite.@tests.toInteger()  ?: 0) - (suite.@failures.toInteger() ?: 0) - (suite.@errors.toInteger() ?: 0) - (suite.@skipped.toInteger() ?: 0)
-                failed  += (suite.@failures.toInteger() ?: 0) + (suite.@errors.toInteger() ?: 0)
-                skipped += (suite.@skipped.toInteger() ?: 0)
-                suite.testcase.each { tc ->
-                  if (tc.failure.size() > 0 || tc.error.size() > 0) {
-                    def msg = tc.failure.size() > 0 ? tc.failure.@message.text() : tc.error.@message.text()
-                    failedTests << [name: "${tc.@classname}.${tc.@name}", message: msg?.take(300) ?: 'No details']
+          if (xmlList) {
+            echo "Found test result files"
+            
+            // Parse each XML file
+            xmlList.split('\n').each { xmlFile ->
+              if (xmlFile && xmlFile.endsWith('.xml')) {
+                try {
+                  def xml = readFile(xmlFile)
+                  def suite = new XmlSlurper().parseText(xml)
+                  
+                  def tests = suite.@tests.toString().toInteger()
+                  def failures = suite.@failures.toString().toInteger()
+                  def errors = suite.@errors.toString().toInteger()
+                  def skips = suite.@skipped.toString().toInteger()
+                  
+                  total   += tests
+                  failed  += failures + errors
+                  skipped += skips
+                  passed  += tests - failures - errors - skips
+                  
+                  // Collect failed test details
+                  suite.testcase.each { tc ->
+                    if (tc.failure.size() > 0 || tc.error.size() > 0) {
+                      def testName = "${tc.@classname}.${tc.@name}"
+                      def msg = tc.failure.size() > 0 ? tc.failure.@message.toString() : tc.error.@message.toString()
+                      failedTests << [name: testName, message: msg.take(300)]
+                    }
                   }
+                } catch (xmlError) {
+                  echo "Error parsing ${xmlFile}: ${xmlError.message}"
                 }
               }
             }
+            
+            echo "Test summary: Total=${total}, Passed=${passed}, Failed=${failed}, Skipped=${skipped}"
+          } else {
+            echo "No test result XML files found"
           }
         } catch (e) {
-          echo "Could not parse test results: ${e.message}"
+          echo "Could not read test results: ${e.message}"
         }
 
         def total     = passed + failed + skipped
