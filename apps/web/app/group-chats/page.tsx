@@ -13,6 +13,265 @@ import { SocketConnectionState } from '@/lib/types';
 
 const FALLBACK = 'https://placehold.co/240x240/png';
 
+// Group Menu Component
+function GroupMenu({ 
+  group, 
+  currentUser,
+  onShowInfo,
+  onRefresh 
+}: { 
+  group: GroupConversation; 
+  currentUser: { id: string; displayName: string } | null;
+  onShowInfo: () => void;
+  onRefresh: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const isOwnerOrAdmin = group.createdByUserId === currentUser?.id || 
+    group.members.some(m => m.userId === currentUser?.id && (m.role === 'admin' || m.role === 'owner'));
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleCopyLink = () => {
+    const link = `${window.location.origin}/group-chats?groupId=${group.id}`;
+    navigator.clipboard.writeText(link);
+    alert('Đã copy link nhóm!');
+    setIsOpen(false);
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!confirm('Bạn có chắc muốn rời nhóm này?')) return;
+    try {
+      await apiFetch(`/group-conversations/${group.id}/members/me`, { method: 'DELETE' });
+      alert('Đã rời nhóm thành công!');
+      window.location.reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể rời nhóm');
+    }
+    setIsOpen(false);
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!confirm('Bạn có chắc muốn xóa nhóm này? Hành động này không thể hoàn tác.')) return;
+    try {
+      await apiFetch(`/group-conversations/${group.id}`, { method: 'DELETE' });
+      alert('Đã xóa nhóm thành công!');
+      window.location.reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Không thể xóa nhóm');
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div style={{ position: 'relative' }} ref={menuRef}>
+      <button 
+        className="btn btn-outline btn-sm" 
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+      >
+        ☰ Menu
+        <span style={{ fontSize: 10 }}>▼</span>
+      </button>
+
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          right: 0,
+          marginTop: 4,
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: 8,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          minWidth: 200,
+          zIndex: 100,
+          overflow: 'hidden'
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid #e5e7eb',
+            background: '#f9fafb'
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{group.name}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{group.members.length} thành viên</div>
+          </div>
+
+          {/* Menu Items */}
+          <div style={{ padding: '8px 0' }}>
+            <button
+              type="button"
+              onClick={() => { onShowInfo(); setIsOpen(false); }}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                textAlign: 'left',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 14
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+            >
+              ℹ️ Thông tin nhóm
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { onRefresh(); setIsOpen(false); }}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                textAlign: 'left',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 14
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+            >
+              🔄 Làm mới tin nhắn
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                textAlign: 'left',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 14
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+            >
+              🔗 Copy link nhóm
+            </button>
+
+            <div style={{ height: 1, background: '#e5e7eb', margin: '8px 0' }} />
+
+            {isOwnerOrAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { alert('Tính năng đang phát triển'); setIsOpen(false); }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    fontSize: 14
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  ⚙️ Cài đặt nhóm
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { alert('Tính năng đang phát triển'); setIsOpen(false); }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    fontSize: 14
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  👥 Quản lý thành viên
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={handleLeaveGroup}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                textAlign: 'left',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 14,
+                color: '#f59e0b'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#fef3c7'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+            >
+              🚪 Rời nhóm
+            </button>
+
+            {group.createdByUserId === currentUser?.id && (
+              <button
+                type="button"
+                onClick={handleDeleteGroup}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 14,
+                  color: '#ef4444'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#fee2e2'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+              >
+                🗑️ Xóa nhóm
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type GroupConversation = {
   id: string;
   name: string;
@@ -309,7 +568,12 @@ export default function GroupChatsPage() {
     loadGroups();
   }, []);
 
-  useEffect(() => subscribeSocketState(setSocketState), []);
+  useEffect(() => {
+    const unsubscribe = subscribeSocketState(setSocketState);
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -544,13 +808,14 @@ export default function GroupChatsPage() {
                     ) : null}
                   </div>
                 </div>
-                <button 
-                  className="btn btn-outline btn-sm" 
-                  type="button"
-                  onClick={() => setShowGroupInfo(!showGroupInfo)}
-                >
-                  ℹ️ Thông tin
-                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <GroupMenu 
+                    group={selectedGroup} 
+                    currentUser={currentUser}
+                    onShowInfo={() => setShowGroupInfo(!showGroupInfo)}
+                    onRefresh={() => loadMessages(selectedGroupId)}
+                  />
+                </div>
               </div>
 
               {/* Search Bar */}
@@ -673,7 +938,7 @@ export default function GroupChatsPage() {
                             groupId={selectedGroupId}
                             isOwn={mine}
                             isOwnerOrAdmin={isOwnerOrAdmin}
-                            onReply={(msg) => setReplyTo(msg)}
+                            onReply={(msg: any) => setReplyTo(msg)}
                             onReactionAdded={() => {}}
                             onMessageUpdated={(updated) => {
                               setMessages((prev) =>
@@ -777,16 +1042,18 @@ export default function GroupChatsPage() {
         onGroupCreated={handleGroupCreated}
       />
 
-      <GroupInfoSidebar
-        group={selectedGroup}
-        isOpen={showGroupInfo}
-        onClose={() => setShowGroupInfo(false)}
-        onGroupUpdated={(updatedGroup) => {
+      {selectedGroup && (
+        <GroupInfoSidebar
+          group={selectedGroup}
+          isOpen={showGroupInfo}
+          onClose={() => setShowGroupInfo(false)}
+          onGroupUpdated={(updatedGroup) => {
           setGroups((prev) =>
             prev.map((g) => (g.id === updatedGroup.id ? updatedGroup : g))
           );
         }}
       />
+      )}
 
       {/* Group Info Sidebar - Placeholder */}
       {showGroupInfo && selectedGroup ? (

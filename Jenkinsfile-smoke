@@ -93,10 +93,31 @@ pipeline {
       }
       post {
         always {
-          junit(
-            testResults: "${AUTOMATION_DIR}/target/surefire-reports/*.xml",
-            allowEmptyResults: true
-          )
+          script {
+            // Parse and store test results
+            def testResult = junit(
+              testResults: "${AUTOMATION_DIR}/target/surefire-reports/*.xml",
+              allowEmptyResults: true
+            )
+            env.TOTAL_TESTS = "${testResult.totalCount}"
+            env.PASSED_TESTS = "${testResult.passCount}"
+            env.FAILED_TESTS = "${testResult.failCount}"
+            env.SKIPPED_TESTS = "${testResult.skipCount}"
+            
+            // Build failed tests list
+            def failedList = []
+            testResult.failedTests?.each { test ->
+              failedList.add("${test.className}.${test.testName}")
+            }
+            env.FAILED_TEST_NAMES = failedList.join('<br>')
+            
+            // Build passed tests list
+            def passedList = []
+            testResult.passedTests?.each { test ->
+              passedList.add("${test.className}.${test.testName}")
+            }
+            env.PASSED_TEST_NAMES = passedList.join('<br>')
+          }
         }
       }
     }
@@ -112,7 +133,6 @@ pipeline {
     stage('Publish Allure Report') {
       steps {
         script {
-          // Generate Allure report
           allure([
             includeProperties: false,
             jdk: '',
@@ -142,12 +162,10 @@ pipeline {
     }
 
     success {
-      script {
-        def testSummary = getTestSummary()
-        emailext(
-          to: "${NOTIFY_EMAIL}",
-          subject: "✅ [SMOKE SUCCESS] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-          body: """
+      emailext(
+        to: "${NOTIFY_EMAIL}",
+        subject: "✅ [SMOKE SUCCESS] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """
 <html>
 <head>
 <style>
@@ -194,10 +212,10 @@ pipeline {
         <th>Skipped</th>
       </tr>
       <tr>
-        <td>${testSummary.total}</td>
-        <td class="passed">${testSummary.passed}</td>
-        <td class="failed">${testSummary.failed}</td>
-        <td class="skipped">${testSummary.skipped}</td>
+        <td>${env.TOTAL_TESTS ?: '0'}</td>
+        <td class="passed">${env.PASSED_TESTS ?: '0'}</td>
+        <td class="failed">${env.FAILED_TESTS ?: '0'}</td>
+        <td class="skipped">${env.SKIPPED_TESTS ?: '0'}</td>
       </tr>
     </table>
     
@@ -206,21 +224,15 @@ pipeline {
 </body>
 </html>
 """.stripIndent(),
-          mimeType: 'text/html'
-        )
-      }
+        mimeType: 'text/html'
+      )
     }
 
     unstable {
-      script {
-        def testSummary = getTestSummary()
-        def failedTests = getFailedTests()
-        def passedTests = getPassedTests()
-        
-        emailext(
-          to: "${NOTIFY_EMAIL}",
-          subject: "⚠️ [SMOKE UNSTABLE] ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${testSummary.failed} Failed",
-          body: """
+      emailext(
+        to: "${NOTIFY_EMAIL}",
+        subject: "⚠️ [SMOKE UNSTABLE] ${env.JOB_NAME} #${env.BUILD_NUMBER} - ${env.FAILED_TESTS ?: '0'} Failed",
+        body: """
 <html>
 <head>
 <style>
@@ -246,6 +258,7 @@ pipeline {
     margin-top: 15px;
   }
   .section { margin-top: 20px; }
+  .test-list { background: #fff; padding: 10px; border: 1px solid #ddd; border-radius: 5px; max-height: 300px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -271,36 +284,28 @@ pipeline {
         <th>Skipped</th>
       </tr>
       <tr>
-        <td>${testSummary.total}</td>
-        <td class="passed">${testSummary.passed}</td>
-        <td class="failed">${testSummary.failed}</td>
-        <td class="skipped">${testSummary.skipped}</td>
+        <td>${env.TOTAL_TESTS ?: '0'}</td>
+        <td class="passed">${env.PASSED_TESTS ?: '0'}</td>
+        <td class="failed">${env.FAILED_TESTS ?: '0'}</td>
+        <td class="skipped">${env.SKIPPED_TESTS ?: '0'}</td>
       </tr>
     </table>
     
-    ${failedTests ? """
+    ${env.FAILED_TESTS && env.FAILED_TESTS != '0' ? """
     <div class="section">
-      <h2>❌ Failed Tests (${testSummary.failed})</h2>
-      <table class="fail-table">
-        <tr>
-          <th>Test Name</th>
-          <th>Error</th>
-        </tr>
-        ${failedTests}
-      </table>
+      <h2>❌ Failed Tests (${env.FAILED_TESTS})</h2>
+      <div class="test-list">
+        ${env.FAILED_TEST_NAMES ?: 'N/A'}
+      </div>
     </div>
     """ : ""}
     
-    ${passedTests ? """
+    ${env.PASSED_TESTS && env.PASSED_TESTS != '0' ? """
     <div class="section">
-      <h2>✅ Passed Tests (${testSummary.passed})</h2>
-      <table class="pass-table">
-        <tr>
-          <th>Test Name</th>
-          <th>Duration</th>
-        </tr>
-        ${passedTests}
-      </table>
+      <h2>✅ Passed Tests (${env.PASSED_TESTS})</h2>
+      <div class="test-list">
+        ${env.PASSED_TEST_NAMES ?: 'N/A'}
+      </div>
     </div>
     """ : ""}
     
@@ -309,17 +314,15 @@ pipeline {
 </body>
 </html>
 """.stripIndent(),
-          mimeType: 'text/html'
-        )
-      }
+        mimeType: 'text/html'
+      )
     }
 
     failure {
-      script {
-        emailext(
-          to: "${NOTIFY_EMAIL}",
-          subject: "❌ [SMOKE FAILURE] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-          body: """
+      emailext(
+        to: "${NOTIFY_EMAIL}",
+        subject: "❌ [SMOKE FAILURE] ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: """
 <html>
 <head>
 <style>
@@ -360,52 +363,8 @@ pipeline {
 </body>
 </html>
 """.stripIndent(),
-          mimeType: 'text/html'
-        )
-      }
+        mimeType: 'text/html'
+      )
     }
   }
-}
-
-// Helper function to get test summary from JUnit results
-def getTestSummary() {
-  def summary = [total: 0, passed: 0, failed: 0, skipped: 0]
-  try {
-    def testResult = junit("${AUTOMATION_DIR}/target/surefire-reports/*.xml", allowEmptyResults: true)
-    summary.total = testResult.totalCount
-    summary.passed = testResult.passCount
-    summary.failed = testResult.failCount
-    summary.skipped = testResult.skipCount
-  } catch (Exception e) {
-    echo "Could not parse test results: ${e.message}"
-  }
-  return summary
-}
-
-// Helper function to get failed tests
-def getFailedTests() {
-  def failedRows = ""
-  try {
-    def testResult = junit("${AUTOMATION_DIR}/target/surefire-reports/*.xml", allowEmptyResults: true)
-    testResult.failedTests?.each { test ->
-      failedRows += "<tr><td>${test.className}.${test.testName}</td><td>${test.errorStackTrace?.take(200) ?: 'N/A'}</td></tr>"
-    }
-  } catch (Exception e) {
-    echo "Could not get failed tests: ${e.message}"
-  }
-  return failedRows
-}
-
-// Helper function to get passed tests
-def getPassedTests() {
-  def passedRows = ""
-  try {
-    def testResult = junit("${AUTOMATION_DIR}/target/surefire-reports/*.xml", allowEmptyResults: true)
-    testResult.passedTests?.each { test ->
-      passedRows += "<tr><td>${test.className}.${test.testName}</td><td>${test.duration}s</td></tr>"
-    }
-  } catch (Exception e) {
-    echo "Could not get passed tests: ${e.message}"
-  }
-  return passedRows
 }
