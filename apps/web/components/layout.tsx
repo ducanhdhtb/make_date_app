@@ -10,7 +10,12 @@ import { SocketConnectionState } from '@/lib/types';
 function SocketBanner() {
   const [state, setState] = useState<SocketConnectionState>('idle');
 
-  useEffect(() => subscribeSocketState(setState), []);
+  useEffect(() => {
+    const unsubscribe = subscribeSocketState(setState);
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
 
   if (state === 'connected' || state === 'idle') return null;
 

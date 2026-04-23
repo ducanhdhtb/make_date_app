@@ -65,7 +65,7 @@ export function getSocketClient() {
     bindSocketEvents(socket);
   } else {
     // Update token if it changed
-    if (socket.auth?.token !== token) {
+    if ((socket.auth as any)?.token !== token) {
       console.log('[Socket] Token updated, reconnecting...');
       socket.auth = { token };
       if (socket.connected) {
@@ -74,7 +74,7 @@ export function getSocketClient() {
     }
   }
 
-  if (!socket.connected && !socket.connecting) {
+  if (!socket.connected) {
     console.log('[Socket] Connecting...');
     setState(socket.active ? 'reconnecting' : 'connecting');
     socket.connect();

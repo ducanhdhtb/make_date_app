@@ -113,6 +113,9 @@ model User {
   callsReceived Call[] @relation("CallReceiver")
   groupMessages             GroupMessage[]
   groupMessageReactions     GroupMessageReaction[]
+  
+  notificationPreferences   NotificationPreferences?
+  pushSubscriptions         PushSubscription[]
 
   @@index([latitude, longitude])
   @@index([lastActiveAt])
@@ -447,4 +450,41 @@ model Call {
   @@index([receiverId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ============ NOTIFICATION PREFERENCES MODELS ============
+
+model NotificationPreferences {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  newMatch          Boolean  @default(true)
+  newMessage        Boolean  @default(true)
+  newLike           Boolean  @default(true)
+  incomingCall      Boolean  @default(true)
+  missedCall        Boolean  @default(true)
+  storyReaction     Boolean  @default(true)
+  groupMessage      Boolean  @default(true)
+  pushEnabled       Boolean  @default(true)
+  soundEnabled      Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
 }

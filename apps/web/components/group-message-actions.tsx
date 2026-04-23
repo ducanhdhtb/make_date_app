@@ -116,7 +116,7 @@ export function GroupMessageActions({
     }
   };
 
-  const isActionDisabled = message.recalledAt || message.deletedAt || loading;
+  const isActionDisabled = Boolean(message.recalledAt || message.deletedAt || loading);
 
   return (
     <div style={{ position: 'relative' }}>
